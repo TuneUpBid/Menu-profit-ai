@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Menu Profit Optimizer</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; background-color: #f9f9f9; }
+        h1 { color: #333; }
+        .container { max-width: 800px; margin: auto; padding: 20px; background: #fff; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        #report-btn { margin-top: 20px; padding: 10px 20px; background: #007BFF; color: white; border: none; cursor: pointer; }
+        #report-btn:disabled { background: #aaa; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Restaurant Menu Profit Optimizer</h1>
+        <p>Upload a PDF of your menu to analyze pricing and get profit optimization recommendations.</p>
+        <input type="file" id="menu-file" accept="application/pdf,image/png,image/jpeg">
+        <button id="upload-btn">Upload & Analyze</button>
+        <div id="results"></div>
+        <button id="report-btn" disabled>Download PDF Report</button>
+    </div>
+
+    <script>
+        const uploadBtn = document.getElementById('upload-btn');
+        const reportBtn = document.getElementById('report-btn');
+        const fileInput = document.getElementById('menu-file');
+        const resultsDiv = document.getElementById('results');
+        let currentData = null;
+
+        uploadBtn.addEventListener('click', async () => {
+            const file = fileInput.files[0];
+            if (!file) {
+                alert('Please select a PDF file.');
+                return;
+            }
+            const formData = new FormData();
+            formData.append('file', file);
+            uploadBtn.disabled = true;
+            uploadBtn.textContent = 'Uploading...';
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                if (!response.ok) {
+                    const err = await response.json();
+                    throw new Error(err.detail || 'Upload failed');
+                }
+                const data = await response.json();
+                currentData = data;
+                displayResults(data);
+                reportBtn.disabled = false;
+            } catch (err) {
+                alert('Error: ' + err.message);
+            } finally {
+                uploadBtn.disabled = false;
+                uploadBtn.textContent = 'Upload & Analyze';
+            }
+        });
+
+        reportBtn.addEventListener('click', async () => {
+            if (!currentData) return;
+            reportBtn.disabled = true;
+            reportBtn.textContent = 'Generating...';
+            try {
+                const response = await fetch('/report', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(currentData)
+                });
+                if (!response.ok) {
+                    const err = await response.json();
+                    throw new Error(err.detail || 'Report generation failed');
+                }
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'report.pdf';
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(url);
+            } catch (err) {
+                alert('Error: ' + err.message);
+            } finally {
+                reportBtn.disabled = false;
+                reportBtn.textContent = 'Download PDF Report';
+            }
+        });
+
+        function displayResults(data) {
+            const { items, analysis } = data;
+            let html = '';
+            html += '<table><thead><tr><th>Item</th><th>Price</th><th>Estimated Cost</th><th>Estimated Profit</th><th>Margin (%)</th><th>Recommendation</th></tr></thead><tbody>';
+            for (let i = 0; i < items.length; i++) {
+                const item = items[i];
+                const ana = analysis[i];
+                html += `<tr><td>${item.name}</td><td>$${item.price.toFixed(2)}</td><td>$${ana.estimated_cost.toFixed(2)}</td><td>$${ana.estimated_profit.toFixed(2)}</td><td>${ana.estimated_margin.toFixed(2)}</td><td>${ana.recommendation}</td></tr>`;
+            }
+            html += '</tbody></table>';
+            resultsDiv.innerHTML = html;
+        }
+    </script>
+</body>
+</html>
